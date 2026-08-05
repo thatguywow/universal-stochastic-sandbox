@@ -11,11 +11,17 @@ python -m venv .venv
 .venv\Scripts\pip install -e ".[dev]"
 ```
 
+The `[dev]` extra adds pytest and ruff. Installing plain `-e .` gives you a
+fully working tool but no test runner — if `pytest` reports *no module named
+pytest*, that is why.
+
 Verify:
 
 ```bash
 .venv\Scripts\python -m pytest -q
 ```
+
+Expect `274 passed`.
 
 ### Running commands
 

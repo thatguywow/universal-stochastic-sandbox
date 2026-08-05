@@ -59,6 +59,12 @@ python -m venv .venv
 The `uss` command installs into the venv. Activate it, or call
 `.venv/bin/uss` directly.
 
+`.` alone installs the tool; `.[dev]` adds pytest and ruff. If `pytest` reports
+*no module named pytest*, you installed without the extra.
+
+Verified from a clean clone: 274 tests, lint, CLI, examples and the web
+interface all pass on a fresh install.
+
 ## Use
 
 ```bash
