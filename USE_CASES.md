@@ -1,6 +1,6 @@
 # Use Cases: the blueprint's two worked examples
 
-Both queries in `universal_stochastic_sandbox_blueprint.pdf`, run end to end.
+Both queries from the original design blueprint, run end to end.
 They go through the identical pipeline and land in completely different places —
 which is the most useful thing this pair can teach you.
 
