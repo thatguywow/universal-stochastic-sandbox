@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Universal Stochastic Sandbox</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#161b22; --panel2:#1c232c; --line:#2a3340;
+    --ink:#e6edf3; --dim:#8b98a5; --faint:#5b6673;
+    --accent:#4c9aff; --accent2:#7ee787; --warn:#f0a742; --bad:#f4736f;
+    --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f6f8fa; --panel:#fff; --panel2:#f0f3f6; --line:#d5dde5;
+           --ink:#1c2128; --dim:#57606a; --faint:#8c959f; }
+  }
+  *{box-sizing:border-box}
+  /* The UA stylesheet hides [hidden] with display:none, but any author rule
+     that sets display -- .grid below -- outranks it, so the tab panels stayed
+     visible and every tab rendered stacked. Restore the intent explicitly. */
+  [hidden]{display:none !important}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  header{padding:18px 24px;border-bottom:1px solid var(--line);
+         display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  h1{margin:0;font-size:17px;letter-spacing:.2px}
+  header .sub{color:var(--dim);font-size:13px}
+  nav{display:flex;gap:4px;padding:0 24px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  nav button{background:none;border:none;color:var(--dim);padding:11px 15px;
+             cursor:pointer;font-size:14px;border-bottom:2px solid transparent}
+  nav button:hover{color:var(--ink)}
+  nav button.on{color:var(--accent);border-bottom-color:var(--accent)}
+  main{padding:22px 24px;max-width:1400px}
+  .grid{display:grid;grid-template-columns:340px 1fr;gap:22px;align-items:start}
+  @media (max-width:900px){ .grid{grid-template-columns:1fr} }
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px}
+  .card h2{margin:0 0 14px;font-size:13px;text-transform:uppercase;
+           letter-spacing:.7px;color:var(--dim);font-weight:600}
+  label{display:block;margin:12px 0 5px;font-size:13px;color:var(--dim)}
+  input,select{width:100%;background:var(--panel2);border:1px solid var(--line);
+               color:var(--ink);border-radius:7px;padding:9px 11px;font-size:14px;
+               font-family:var(--mono)}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .hint{font-size:12px;color:var(--faint);margin-top:4px;line-height:1.45}
+  button.go{width:100%;margin-top:18px;background:var(--accent);color:#fff;border:none;
+            border-radius:7px;padding:11px;font-size:14px;font-weight:600;cursor:pointer}
+  button.go:hover{filter:brightness(1.1)}
+  button.go:disabled{opacity:.5;cursor:default}
+  .check{display:flex;align-items:center;gap:8px;margin-top:14px;color:var(--dim);font-size:13px}
+  .check input{width:auto}
+
+  .big{font-family:var(--mono);font-size:38px;font-weight:600;letter-spacing:-.5px;margin:2px 0 2px}
+  .meta{color:var(--dim);font-size:13px}
+
+  .band{margin:18px 0 6px;padding:14px;border-radius:9px;border:1px solid var(--line);background:var(--panel2)}
+  .band.total{border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 9%,transparent)}
+  .band .lab{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--dim);
+             display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .band .val{font-family:var(--mono);font-size:19px;margin-top:5px}
+  .band .why{font-size:12px;color:var(--faint);margin-top:6px;line-height:1.5}
+  .tag{font-size:10px;padding:2px 7px;border-radius:99px;border:1px solid var(--line);
+       color:var(--dim);letter-spacing:.4px;white-space:nowrap}
+  .tag.quote{border-color:var(--accent2);color:var(--accent2)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  td.num{font-family:var(--mono);text-align:right}
+
+  .caveat{display:flex;gap:9px;padding:10px 12px;border-radius:7px;font-size:13px;
+          background:color-mix(in srgb,var(--warn) 11%,transparent);
+          border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);margin-top:9px;line-height:1.5}
+  .caveat.hard{background:color-mix(in srgb,var(--bad) 11%,transparent);
+               border-color:color-mix(in srgb,var(--bad) 38%,transparent)}
+  .caveat .ic{flex:none;font-weight:700;color:var(--warn)}
+  .caveat.hard .ic{color:var(--bad)}
+
+  .err{background:color-mix(in srgb,var(--bad) 14%,transparent);
+       border:1px solid var(--bad);border-radius:7px;padding:12px;font-size:13px;
+       font-family:var(--mono);margin-bottom:14px;white-space:pre-wrap}
+  .muted{color:var(--faint);font-size:13px;text-align:center;padding:44px 20px;line-height:1.6}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line);
+        border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;
+        vertical-align:-2px;margin-right:7px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  svg{display:block;width:100%;height:auto}
+  .evrow{border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:10px;background:var(--panel2)}
+  .evrow .top{display:flex;gap:8px;align-items:center}
+  .evrow .top input[type=text]{flex:1}
+  .evrow .rm{width:30px;flex:none;background:none;border:1px solid var(--line);
+             color:var(--dim);border-radius:6px;cursor:pointer;padding:8px 0}
+  .addbtn{width:100%;margin-top:10px;background:var(--panel2);color:var(--ink);
+          border:1px dashed var(--line);border-radius:7px;padding:9px;cursor:pointer;font-size:13px}
+  code{font-family:var(--mono);background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12px}
+
+  /* Info tab: a reading column, not a control panel. */
+  .doc{max-width:820px;display:flex;flex-direction:column;gap:16px}
+  .doc p{margin:0 0 10px}
+  .doc p:last-child{margin-bottom:0}
+  .doc ol,.doc ul{margin:0;padding-left:20px}
+  .doc li{margin-bottom:8px}
+  .doc li:last-child{margin-bottom:0}
+  .doc .note{font-size:13px;color:var(--dim);line-height:1.55}
+  .doc table{margin:4px 0 12px}
+  .doc td:first-child{color:var(--dim)}
+  .doc .lede{border-left:3px solid var(--accent)}
+  .doc .lede p{font-size:15px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Universal Stochastic Sandbox</h1>
+  <span class="sub">vectorized Monte Carlo &middot; bounded estimates</span>
+</header>
+
+<nav>
+  <button data-tab="info" class="on">Start here</button>
+  <button data-tab="query">Simulate</button>
+  <button data-tab="priors">Uncertainty</button>
+  <button data-tab="sens">What to measure</button>
+</nav>
+
+<main>
+  <!-- ============================== INFO ============================== -->
+  <section id="tab-info">
+    <div class="doc">
+      <div class="card lede">
+        <h2 style="margin-bottom:8px">Read this before trusting a number</h2>
+        <p><strong>This engine returns what you feed it.</strong> Run ten million
+        draws at <code>p = 0.322</code> and it reports 0.322 with a very tight
+        interval &mdash; but that interval describes the random number generator,
+        not the world. Monte&nbsp;Carlo sampling adds no information that was not
+        already in your parameters.</p>
+        <p>Everything below follows from that one fact. If you take away nothing
+        else: <strong>the narrow interval is almost never the one to quote.</strong></p>
+      </div>
+
+      <div class="card">
+        <h2>The two intervals</h2>
+        <table>
+          <tr><th></th><th>Simulation precision</th><th>Given your evidence</th></tr>
+          <tr><td>Answers</td><td>How carefully did the engine add up?</td>
+              <td>What range is consistent with my data?</td></tr>
+          <tr><td>Shrinks with sample size</td><td><strong>yes</strong>, as 1/&radic;N</td><td>no</td></tr>
+          <tr><td>Shrinks with more data</td><td>no</td><td><strong>yes</strong></td></tr>
+          <tr><td>Quote it?</td><td>no</td><td><strong>yes</strong></td></tr>
+        </table>
+        <p class="note">On the Uncertainty tab these are labelled for you. A survey
+        of 10 people produces a simulation interval ~800&times; narrower than the
+        honest one &mdash; identical arithmetic, wildly different meaning.</p>
+      </div>
+
+      <div class="card">
+        <h2>Which tab</h2>
+        <table>
+          <tr><th>Your question</th><th>Tab</th></tr>
+          <tr><td>What does this distribution look like, if my parameters are right?</td><td>Simulate</td></tr>
+          <tr><td>&hellip;and how wrong could my parameters be?</td><td><strong>Uncertainty</strong></td></tr>
+          <tr><td>Which unknown should I go measure first?</td><td>What to measure</td></tr>
+        </table>
+        <p class="note"><strong>Uncertainty is the tab that produces a defensible
+        number.</strong> Simulate is for exploring shapes.</p>
+      </div>
+
+      <div class="card">
+        <h2>Where the counts come from</h2>
+        <p>&ldquo;How many yes&rdquo; and &ldquo;out of how many&rdquo; are the only
+        real information in the pipeline. The engine cannot supply them.</p>
+        <ol>
+          <li><strong>Count them.</strong> Define the population first. &ldquo;61 of
+          152 people on this street on Tuesday&rdquo; is a real measurement of
+          <em>that</em> population &mdash; it becomes wrong when you call it
+          &ldquo;the city&rdquo;.</li>
+          <li><strong>Query data you already have.</strong>
+          <code>count(*) FILTER (WHERE x)</code> and <code>count(*)</code>.</li>
+          <li><strong>Cite a study</strong> that reports both a percentage
+          <em>and</em> its sample size. No sample size means it is an assumption,
+          not evidence.</li>
+          <li><strong>You have nothing.</strong> Do not invent counts. Report an
+          upper bound instead, or work out what value would change your decision.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h2>How many do I need to count?</h2>
+        <p class="note">Assuming the answer is somewhere near 30%. Computed live by
+        the same estimator the results use.</p>
+        <table id="info-tradeoff"><tr><td class="muted">loading&hellip;</td></tr></table>
+        <p class="note"><strong>Precision costs quadratically</strong> &mdash;
+        halving the interval costs four times the counting.</p>
+        <div id="info-targets"></div>
+      </div>
+
+      <div class="card">
+        <h2>What the engine can and cannot reach</h2>
+        <p class="note">From the blueprint's own Part&nbsp;IV. Attach one to a run
+        with the Domain selector on the Simulate tab.</p>
+        <table id="info-domains"><tr><td class="muted">loading&hellip;</td></tr></table>
+        <p class="note">The last row is the honest one. For an event never observed,
+        there is no prior to condition on: the engine returns the rate you supplied,
+        with an interval describing only its own arithmetic.</p>
+      </div>
+
+      <div class="card">
+        <h2>Query classes</h2>
+        <table id="info-classes"><tr><td class="muted">loading&hellip;</td></tr></table>
+        <p class="note">Register your own in Python and it appears here
+        automatically &mdash; any non-decreasing inverse CDF works.</p>
+      </div>
+
+      <div class="card">
+        <h2>Reading the warnings</h2>
+        <p>Amber notes are advisory. <strong>Red ones mean the number above them
+        is not what it appears to be</strong> &mdash; always read those.</p>
+        <table>
+          <tr><th>Warning</th><th>What to do</th></tr>
+          <tr><td>parameter uncertainty exceeds Monte Carlo error</td>
+              <td>Normal and expected. Do not raise sample size; get more data.</td></tr>
+          <tr><td>quantised by the inner simulation grid</td>
+              <td>Your event is rarer than the inner run can resolve. Raise
+                  replications, or report a bound.</td></tr>
+          <tr><td>zero observations</td>
+              <td>The central value is the prior, not data. Quote the upper end.</td></tr>
+          <tr><td>counts are overdispersed</td>
+              <td>Not Poisson. The exact interval shown is too narrow.</td></tr>
+          <tr><td>ranking is not resolved</td>
+              <td>The top inputs overlap. Do not act on the order; raise precision.</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Method notes</h2>
+        <ul>
+          <li><strong>Sampling.</strong> Vectorized inverse-transform:
+          <code>U ~ Uniform(0,1)</code> mapped through <code>F<sup>-1</sup>(U)</code>.
+          Poisson uses a saturating CDF table with <code>searchsorted</code>,
+          verified bit-identical to SciPy and ~120&times; faster.</li>
+          <li><strong>Intervals.</strong> Wilson score for proportions, Garwood
+          (exact Poisson) for rates, Student-t for means. Normal approximations
+          are not used where they are invalid &mdash; at p=0.002, n=500 measured
+          coverage is Wilson 0.913 vs Wald 0.639.</li>
+          <li><strong>Posteriors.</strong> Beta&ndash;Binomial, Gamma&ndash;Poisson,
+          and a Student-t marginal for a mean with unknown variance (treating an
+          estimated &sigma; as known under-covers: 92% vs 95% at n=8).</li>
+          <li><strong>Variance reduction.</strong> Antithetic standard errors are
+          computed across pairs, never by pooling &mdash; pooling overstates error
+          by ~3.4&times;. Importance sampling weights are formed in log space and
+          flagged when the effective sample size degenerates.</li>
+          <li><strong>Sensitivity.</strong> Saltelli design, Sobol'-Mauntz for
+          first-order and Jansen for total effect, with bootstrap confidence
+          intervals &mdash; a bare index would repeat the very mistake this tool
+          exists to prevent. Model determinism is tested directly.</li>
+          <li><strong>Goodness of fit.</strong> KS p-values use a parametric
+          bootstrap. The textbook test with fitted parameters is invalid: on
+          genuinely normal data it rejected 0.0% of the time against a nominal 5%.</li>
+          <li><strong>MCMC.</strong> Multiple dispersed chains with split R-hat and
+          autocorrelation-adjusted effective sample size; non-convergence is
+          reported rather than hidden.</li>
+        </ul>
+        <p class="note">273 tests. Samplers are checked against analytic truth and
+        intervals against measured coverage, not merely for running without error.</p>
+      </div>
+
+      <div class="card">
+        <h2>Worked examples</h2>
+        <p>Two cases from the original blueprint, run end to end:</p>
+        <table>
+          <tr><th></th><th>Tank tops on a hot day</th><th>Balloon from thin air</th></tr>
+          <tr><td>Evidence</td><td>countable</td><td>none, and none obtainable</td></tr>
+          <tr><td>Answer</td><td>40.2%, CI 32.8&ndash;48.6%</td><td>rate &lt; 2e-11, floor of 0</td></tr>
+          <tr><td>More data helps?</td><td>yes</td><td>not collectable</td></tr>
+        </table>
+        <p class="note">Same pipeline both times. What differed was entirely
+        upstream. Run <code>examples/case1_tanktops.py</code> and
+        <code>case2_balloon.py</code>, or see <code>USE_CASES.md</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ SIMULATE ============================ -->
+  <section id="tab-query" class="grid" hidden>
+    <div class="card">
+      <h2>Question</h2>
+      <label>What kind of thing are you estimating?</label>
+      <select id="q-class"></select>
+      <div class="hint" id="q-desc"></div>
+
+      <div id="q-params"></div>
+
+      <label>Sample size</label>
+      <select id="q-n">
+        <option value="100000">100,000 &mdash; quick look</option>
+        <option value="1000000" selected>1,000,000 &mdash; normal</option>
+        <option value="10000000">10,000,000 &mdash; precise</option>
+      </select>
+
+      <label>Domain (sets a realistic ceiling)</label>
+      <select id="q-domain"><option value="">none</option></select>
+
+      <div class="check">
+        <input type="checkbox" id="q-anti">
+        <label for="q-anti" style="margin:0">Antithetic variates (less noise, same cost)</label>
+      </div>
+
+      <button class="go" id="q-run">Run simulation</button>
+    </div>
+
+    <div class="card" id="q-out">
+      <div class="muted">Set up a question and run it.</div>
+    </div>
+  </section>
+
+  <!-- =========================== UNCERTAINTY =========================== -->
+  <section id="tab-priors" class="grid" hidden>
+    <div class="card">
+      <h2>What do you actually know?</h2>
+      <div class="hint">
+        Each input below is a parameter you are <em>not</em> certain about.
+        Enter the evidence you have and the engine carries that uncertainty
+        through, instead of pretending the number is exact.
+      </div>
+
+      <label>Estimating</label>
+      <select id="p-class"></select>
+
+      <div id="p-evidence"></div>
+      <button class="addbtn" id="p-add">+ add another uncertain input</button>
+
+      <label>Replications per parameter draw</label>
+      <select id="p-inner">
+        <option value="20000">20,000</option>
+        <option value="100000" selected>100,000</option>
+        <option value="500000">500,000</option>
+      </select>
+      <div class="hint">Raise this if you see a &ldquo;quantised&rdquo; warning.</div>
+
+      <button class="go" id="p-run">Run with uncertainty</button>
+    </div>
+
+    <div class="card" id="p-out">
+      <div class="muted">
+        Describe your evidence and run it.<br>
+        This is the mode that produces a number you can defend.
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= WHAT TO MEASURE ========================= -->
+  <section id="tab-sens" class="grid" hidden>
+    <div class="card">
+      <h2>Where to spend effort</h2>
+      <div class="hint">
+        With two or more uncertain inputs, this ranks which one is actually
+        driving the spread of your answer &mdash; so you know what to go measure
+        first. Uses the evidence entered on the Uncertainty tab.
+      </div>
+      <label>Precision of the ranking</label>
+      <select id="s-base">
+        <option value="1000">fast</option>
+        <option value="3000" selected>normal</option>
+        <option value="8000">careful</option>
+      </select>
+      <button class="go" id="s-run">Rank the inputs</button>
+    </div>
+    <div class="card" id="s-out">
+      <div class="muted">Enter at least two uncertain inputs on the Uncertainty tab first.</div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const fmt = (v, d = 6) => {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  const a = Math.abs(v);
+  if (a !== 0 && (a < 1e-4 || a >= 1e7)) return v.toExponential(3);
+  return Number(v.toPrecision(d)).toString();
+};
+const esc = s => String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+let CLASSES = [], DOMAINS = {};
+
+async function api(path, body) {
+  const r = await fetch(path, body ? {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body)
+  } : {});
+  const data = await r.json();
+  if (!r.ok || data.error) throw new Error(data.error || `request failed (${r.status})`);
+  return data;
+}
+
+/* ---------------------------------------------------------------- tabs */
+const TABS = ["info","query","priors","sens"];
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
+  TABS.forEach(t => $("#tab-" + t).hidden = (t !== b.dataset.tab));
+  if (b.dataset.tab === "info") loadReference();
+});
+
+/* ------------------------------------------------------- info tab */
+let referenceLoaded = false;
+async function loadReference(){
+  if (referenceLoaded) return;
+  referenceLoaded = true;
+  try {
+    const d = await api("/api/reference", {});
+
+    $("#info-tradeoff").innerHTML =
+      `<tr><th>count this many</th><th style="text-align:right">answer good to</th><th></th></tr>` +
+      d.tradeoff.map(r => {
+        const note = r.n === 10 ? "basically useless"
+                   : r.n === 100 ? "usual sweet spot"
+                   : r.n === 2500 ? "rarely worth it" : "";
+        return `<tr><td class="num">${r.n.toLocaleString()}</td>
+          <td class="num">±${(r.half_width*100).toFixed(1)}%</td>
+          <td class="note">${note}</td></tr>`;
+      }).join("");
+
+    $("#info-targets").innerHTML = "<p class='note'>" + d.targets.map(t =>
+      `want ±${(t.half_width*100).toFixed(0)}% → count <strong>${t.n.toLocaleString()}</strong>`
+    ).join(" &nbsp;·&nbsp; ") + "</p>";
+
+    $("#info-domains").innerHTML =
+      `<tr><th>Domain</th><th>Reachable</th><th>Limited by</th></tr>` +
+      Object.values(d.domains).map(v => {
+        const band = v.band[1] === 0 ? "~0%"
+          : `${(v.band[0]*100).toFixed(0)}–${(v.band[1]*100).toFixed(1)}%`;
+        return `<tr><td>${esc(v.label)}</td><td class="num">${band}</td>
+                <td class="note">${esc(v.bottleneck)}</td></tr>`;
+      }).join("");
+
+    $("#info-classes").innerHTML =
+      `<tr><th>Class</th><th>Use for</th><th>Parameters</th></tr>` +
+      d.classes.map(c => `<tr><td><code>${esc(c.name)}</code></td>
+        <td class="note">${esc(c.describe)}</td>
+        <td class="note">${c.params.map(p=>`<code>${esc(p)}</code>`).join(" ") || "—"}</td></tr>`).join("");
+  } catch(e){
+    referenceLoaded = false;
+    $("#info-tradeoff").innerHTML = `<tr><td class="err">${esc(e.message)}</td></tr>`;
+  }
+}
+
+/* ------------------------------------------------------------ bootstrap */
+(async function init(){
+  const d = await api("/api/classes");
+  CLASSES = d.classes; DOMAINS = d.domains;
+
+  for (const sel of [$("#q-class"), $("#p-class")]) {
+    sel.innerHTML = CLASSES.map(c => `<option value="${c.name}">${esc(c.describe)}</option>`).join("");
+  }
+  $("#q-domain").innerHTML = '<option value="">none</option>' +
+    Object.entries(DOMAINS).map(([k, v]) =>
+      `<option value="${k}">${esc(v.label)} — ${(v.band[0]*100).toFixed(0)}–${(v.band[1]*100).toFixed(1)}%</option>`
+    ).join("");
+
+  $("#q-class").value = "gaussian";
+  $("#p-class").value = "bernoulli";
+  renderParams(); renderEvidence(); loadReference();
+})().catch(e => document.body.insertAdjacentHTML("afterbegin",
+  `<div class="err" style="margin:20px">${esc(e.message)}</div>`));
+
+/* ------------------------------------------------------- simulate tab */
+function classOf(name){ return CLASSES.find(c => c.name === name); }
+
+function renderParams(){
+  const c = classOf($("#q-class").value);
+  $("#q-desc").textContent = c.describe;
+  if (!c.params.length){
+    $("#q-params").innerHTML = `<div class="hint" style="margin-top:12px">
+      This class takes data rather than typed parameters — use <code>uss fit</code>.</div>`;
+    return;
+  }
+  $("#q-params").innerHTML = c.params.map(p => `
+    <label>${esc(p.label)}</label>
+    <input type="number" data-p="${p.name}" value="${p.default}" step="${p.step}"
+      ${p.minimum !== null ? `min="${p.minimum}"` : ""}
+      ${p.maximum !== null ? `max="${p.maximum}"` : ""}>`).join("");
+}
+$("#q-class").onchange = renderParams;
+
+$("#q-run").onclick = async () => {
+  const btn = $("#q-run"); btn.disabled = true;
+  const out = $("#q-out");
+  out.innerHTML = `<div class="muted"><span class="spin"></span>running…</div>`;
+  try {
+    // A blank number input parses to NaN, which JSON.stringify writes as null
+    // and the server then rejects with an opaque type error. Catch it here.
+    const params = {};
+    for (const i of $("#q-params").querySelectorAll("[data-p]")){
+      const v = Number(String(i.value).trim());
+      if (!Number.isFinite(v))
+        throw new Error(`"${i.previousElementSibling.textContent}" must be a number`);
+      params[i.dataset.p] = v;
+    }
+    const r = await api("/api/query", {
+      query_class: $("#q-class").value, parameters: params,
+      sample_size: parseInt($("#q-n").value), antithetic: $("#q-anti").checked,
+      domain: $("#q-domain").value
+    });
+    out.innerHTML = renderQuery(r);
+  } catch(e){ out.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  btn.disabled = false;
+};
+
+function renderQuery(r){
+  const [lo, hi] = r.monte_carlo_interval;
+  const pct = (r.confidence_level*100).toFixed(0);
+  return `
+    <h2>Result</h2>
+    <div class="big">${fmt(r.point_estimate)}</div>
+    <div class="meta">${r.sample_size.toLocaleString()} draws in ${r.elapsed_seconds.toFixed(3)}s
+      &middot; spread (sd) ${fmt(Math.sqrt(r.variance), 4)}</div>
+
+    <div class="band">
+      <div class="lab"><span>${pct}% simulation-precision interval</span>
+        <span class="tag">${esc(r.interval_type)}</span></div>
+      <div class="val">[ ${fmt(lo)} , ${fmt(hi)} ]</div>
+      <div class="why">How precisely the engine evaluated <em>your</em> numbers.
+        It says nothing about whether those numbers are right. For that, use the
+        Uncertainty tab.</div>
+    </div>
+
+    ${chart(r.chart)}
+    ${quantileTable(r)}
+    ${caveats(r.caveats)}`;
+}
+
+function quantileTable(r){
+  const q = r.quantiles || {};
+  const rows = [["min", r.min_observed], ["1%", q.p01], ["25%", q.p25],
+                ["median", q.p50], ["75%", q.p75], ["99%", q.p99], ["max", r.max_observed]];
+  return `<table><tr><th>Point</th><th style="text-align:right">Value</th></tr>
+    ${rows.map(([k,v]) => `<tr><td>${k}</td><td class="num">${fmt(v,5)}</td></tr>`).join("")}</table>`;
+}
+
+/* --------------------------------------------------------------- chart */
+function chart(c){
+  if (!c) return "";
+  const W = 640, H = 190, PAD = 30;
+  if (c.type === "categorical"){
+    const tot = c.counts.reduce((a,b)=>a+b,0) || 1, bw = 150;
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="outcome split">
+      ${c.counts.map((n,i)=>{
+        const h = (H-PAD*2) * n/tot, x = 140 + i*(bw+40), y = H-PAD-h;
+        return `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="4"
+                  fill="${i?'var(--accent)':'var(--line)'}"/>
+                <text x="${x+bw/2}" y="${H-11}" fill="var(--dim)" font-size="12"
+                  text-anchor="middle">${c.labels[i]} — ${(100*n/tot).toFixed(1)}%</text>`;
+      }).join("")}
+    </svg>`;
+  }
+  const max = Math.max(...c.counts) || 1;
+  const n = c.counts.length, bw = (W - PAD*2) / n;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="distribution">
+    ${c.counts.map((v,i)=>{
+      const h = (H-PAD*2) * v/max;
+      return `<rect x="${PAD + i*bw}" y="${H-PAD-h}" width="${Math.max(bw-1,1)}"
+                height="${h}" fill="var(--accent)" opacity=".8"/>`;
+    }).join("")}
+    <line x1="${PAD}" y1="${H-PAD}" x2="${W-PAD}" y2="${H-PAD}" stroke="var(--line)"/>
+    <text x="${PAD}" y="${H-9}" fill="var(--faint)" font-size="11">${fmt(c.centres[0],4)}</text>
+    <text x="${W-PAD}" y="${H-9}" fill="var(--faint)" font-size="11"
+      text-anchor="end">${fmt(c.centres[c.centres.length-1],4)}</text>
+  </svg>`;
+}
+
+/* ------------------------------------------------------------- caveats */
+function caveats(list){
+  if (!list || !list.length) return "";
+  return list.map(c => {
+    const hard = /will not narrow|quantised|overdispersed|not resolvable|above the target/.test(c);
+    return `<div class="caveat${hard?" hard":""}"><span class="ic">!</span><span>${esc(c)}</span></div>`;
+  }).join("");
+}
+
+/* ------------------------------------------------------ uncertainty tab */
+let evidenceRows = [];
+const EV_KINDS = {
+  proportion:  {label:"A proportion (x out of n)",       fields:[["successes","how many yes",3],["trials","out of how many",10]]},
+  rate:        {label:"A rate (events over exposure)",   fields:[["events","events seen",50],["exposure","over how much",10000]]},
+  measurements:{label:"Repeated measurements",           fields:[["observations","values, comma separated","31, 28, 34, 30, 33"]]}
+};
+
+// The form used to render each field's default as its `value` without writing
+// that default into `vals`. Anything the user did not personally retype was
+// then read back as undefined and coerced to 0 -- so a form showing
+// "events 50, exposure 10000" quietly submitted events=0, exposure=1.
+// Seeding `vals` from the same defaults keeps displayed and submitted equal.
+function defaultsFor(kind){
+  return Object.fromEntries(EV_KINDS[kind].fields.map(([f, , ph]) => [f, ph]));
+}
+
+// Pair each query class with the evidence type that actually fits it.
+function naturalEvidence(className){
+  const c = classOf(className);
+  if (!c) return "proportion";
+  if (c.kind === "proportion") return "proportion";
+  if (c.kind === "count") return "rate";
+  return "measurements";
+}
+
+function newRow(param, kind){
+  return {param, kind, vals: defaultsFor(kind)};
+}
+
+function renderEvidence(){
+  if (!evidenceRows.length){
+    const c = classOf($("#p-class").value);
+    const first = c.params.length ? c.params[0].name : "probability";
+    evidenceRows = [newRow(first, naturalEvidence($("#p-class").value))];
+  }
+  $("#p-evidence").innerHTML = evidenceRows.map((row,i) => {
+    const k = EV_KINDS[row.kind];
+    return `<div class="evrow">
+      <div class="top">
+        <input type="text" data-i="${i}" data-f="param" value="${esc(row.param)}"
+               placeholder="parameter name">
+        ${evidenceRows.length>1?`<button class="rm" data-rm="${i}">×</button>`:""}
+      </div>
+      <label>Evidence type</label>
+      <select data-i="${i}" data-f="kind">
+        ${Object.entries(EV_KINDS).map(([kk,vv]) =>
+          `<option value="${kk}" ${kk===row.kind?"selected":""}>${vv.label}</option>`).join("")}
+      </select>
+      ${k.fields.map(([f,lab,ph]) => `
+        <label>${lab}</label>
+        <input type="text" data-i="${i}" data-v="${f}"
+               value="${esc(row.vals[f] !== undefined ? row.vals[f] : ph)}">`).join("")}
+    </div>`;
+  }).join("");
+
+  $("#p-evidence").querySelectorAll("[data-f]").forEach(el => el.onchange = e => {
+    const i = +e.target.dataset.i;
+    if (e.target.dataset.f === "kind"){
+      evidenceRows[i].kind = e.target.value;
+      evidenceRows[i].vals = defaultsFor(e.target.value);
+    } else evidenceRows[i].param = e.target.value;
+    renderEvidence();
+  });
+  $("#p-evidence").querySelectorAll("[data-v]").forEach(el => el.onchange = e => {
+    evidenceRows[+e.target.dataset.i].vals[e.target.dataset.v] = e.target.value;
+  });
+  $("#p-evidence").querySelectorAll("[data-rm]").forEach(el => el.onclick = e => {
+    evidenceRows.splice(+e.target.dataset.rm, 1); renderEvidence();
+  });
+}
+$("#p-add").onclick = () => {
+  evidenceRows.push(newRow("", naturalEvidence($("#p-class").value)));
+  renderEvidence();
+};
+$("#p-class").onchange = () => { evidenceRows = []; renderEvidence(); };
+
+// Parse strictly. Coercing a blank or malformed field to 0 (or exposure to 1)
+// produces a confident answer to a question the user did not ask; refusing is
+// the only safe behaviour for a field that feeds a posterior.
+function num(value, label){
+  const n = Number(String(value ?? "").trim());
+  if (!Number.isFinite(n)) throw new Error(`"${label}" must be a number`);
+  return n;
+}
+
+function collectPosteriors(){
+  const out = {};
+  for (const row of evidenceRows){
+    const name = row.param.trim();
+    if (!name) throw new Error("every uncertain input needs a parameter name");
+    if (out[name]) throw new Error(`two inputs are both named "${name}"`);
+    const v = row.vals;
+
+    if (row.kind === "proportion"){
+      const successes = num(v.successes, "how many yes");
+      const trials = num(v.trials, "out of how many");
+      if (trials < 0 || successes < 0) throw new Error("counts cannot be negative");
+      if (successes > trials) throw new Error(`"${name}": ${successes} yes out of only ${trials}`);
+      out[name] = {kind:"proportion", successes, trials};
+    } else if (row.kind === "rate"){
+      const events = num(v.events, "events seen");
+      const exposure = num(v.exposure, "over how much");
+      if (events < 0) throw new Error("event count cannot be negative");
+      if (exposure <= 0) throw new Error(`"${name}": exposure must be greater than zero`);
+      out[name] = {kind:"rate", events, exposure};
+    } else {
+      const raw = String(v.observations ?? "").split(",").map(s => s.trim()).filter(Boolean);
+      const nums = raw.map(s => num(s, "measurement"));
+      if (nums.length < 2)
+        throw new Error(`"${name}": need at least 2 comma-separated measurements`);
+      out[name] = {kind:"measurements", observations:nums};
+    }
+  }
+  return out;
+}
+
+$("#p-run").onclick = async () => {
+  const btn = $("#p-run"); btn.disabled = true;
+  const out = $("#p-out");
+  out.innerHTML = `<div class="muted"><span class="spin"></span>propagating uncertainty…</div>`;
+  try {
+    const r = await api("/api/priors", {
+      query_class: $("#p-class").value, posteriors: collectPosteriors(),
+      inner_sample_size: parseInt($("#p-inner").value), parameter_draws: 400
+    });
+    out.innerHTML = renderPriors(r);
+  } catch(e){ out.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  btn.disabled = false;
+};
+
+function renderPriors(r){
+  const pct = (r.confidence_level*100).toFixed(0);
+  const [mlo, mhi] = r.monte_carlo_interval;
+  const [tlo, thi] = r.total_interval || [null, null];
+  const mw = mhi - mlo, tw = (thi ?? 0) - (tlo ?? 0);
+  const ratio = mw > 0 && tw > 0 ? (tw/mw) : null;
+
+  // When the outcome is rarer than the inner simulation can resolve, the
+  // propagated interval collapses to a single grid point and means nothing.
+  // Badging that "quote this one" would be actively misleading, so the panel
+  // switches to pointing at the posterior ranges, which are still exact.
+  const quantised = r.caveats.some(c => /quantised by the inner/.test(c)) || tw === 0;
+
+  const totalBand = quantised ? `
+    <div class="band" style="border-color:var(--warn)">
+      <div class="lab"><span>${pct}% interval given your evidence</span>
+        <span class="tag" style="border-color:var(--warn);color:var(--warn)">not resolvable</span></div>
+      <div class="val">[ ${fmt(tlo)} , ${fmt(thi)} ]</div>
+      <div class="why">Your outcome is rarer than the inner simulation can see, so
+        this collapsed to a single grid point &mdash; it is rounding, not a result.
+        <strong>Read the input ranges below instead</strong>; those are exact.
+        Raise &ldquo;replications per parameter draw&rdquo;, or if the event has
+        never been observed, report the upper bound rather than a probability.</div>
+    </div>` : `
+    <div class="band total">
+      <div class="lab"><span>${pct}% interval given your evidence</span>
+        <span class="tag quote">quote this one</span></div>
+      <div class="val">[ ${fmt(tlo)} , ${fmt(thi)} ]</div>
+      <div class="why">Width ${fmt(tw,3)}${ratio ? ` — <strong>${ratio.toFixed(0)}× wider</strong>` : ""}.
+        This is the range consistent with the data you actually have.
+        More simulation will not shrink it; more evidence will.</div>
+    </div>`;
+
+  const zeroEvidence = Object.values(r.posteriors).some(p => p.n_observations === 0);
+
+  return `
+    <h2>Result</h2>
+    <div class="big">${fmt(r.point_estimate)}</div>
+    <div class="meta">central estimate &middot; ${r.elapsed_seconds.toFixed(2)}s</div>
+
+    <div class="band">
+      <div class="lab"><span>${pct}% simulation precision</span><span class="tag">ignore this one</span></div>
+      <div class="val">[ ${fmt(mlo)} , ${fmt(mhi)} ]</div>
+      <div class="why">Width ${fmt(mw,3)}. This only reflects how many draws were taken.</div>
+    </div>
+
+    ${totalBand}
+
+    <table>
+      <tr><th>Uncertain input</th><th style="text-align:right">Central</th>
+          <th style="text-align:right">95% range</th><th style="text-align:right">Observations</th></tr>
+      ${Object.entries(r.posteriors).map(([k,p]) => `
+        <tr><td>${esc(k)}</td><td class="num">${fmt(p.mean,4)}</td>
+        <td class="num">${fmt(p.interval[0],4)} – ${fmt(p.interval[1],4)}</td>
+        <td class="num">${p.n_observations}</td></tr>`).join("")}
+    </table>
+    ${zeroEvidence ? `<div class="caveat hard"><span class="ic">!</span><span>
+      An input has <strong>zero observations</strong>. Its central value comes entirely
+      from the prior, not from data &mdash; the true value could be zero. Report the
+      upper end of its range as a bound, not the centre as an estimate.</span></div>` : ""}
+    ${caveats(r.caveats)}`;
+}
+
+/* -------------------------------------------------------- sensitivity */
+$("#s-run").onclick = async () => {
+  const btn = $("#s-run"); btn.disabled = true;
+  const out = $("#s-out");
+  out.innerHTML = `<div class="muted"><span class="spin"></span>ranking inputs…</div>`;
+  try {
+    const r = await api("/api/sensitivity", {
+      query_class: $("#p-class").value, posteriors: collectPosteriors(),
+      n_base: parseInt($("#s-base").value)
+    });
+    out.innerHTML = renderSens(r);
+  } catch(e){ out.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  btn.disabled = false;
+};
+
+function renderSens(r){
+  const top = r.rows[0];
+  const bars = r.rows.map(row => {
+    const w = Math.max(0, Math.min(1, row.total_effect)) * 100;
+    // Draw the bootstrap interval as a lighter span behind the point estimate,
+    // so a ranking that is not statistically resolved looks unresolved.
+    let ciBar = "", ciText = "—";
+    if (row.total_interval){
+      const [lo, hi] = row.total_interval;
+      ciBar = `<div style="position:absolute;left:${lo*100}%;width:${(hi-lo)*100}%;
+                 height:100%;background:var(--accent);opacity:.28;border-radius:4px"></div>`;
+      ciText = `${(lo*100).toFixed(0)}–${(hi*100).toFixed(0)}%`;
+    }
+    return `<tr><td>${esc(row.name)}</td>
+      <td style="width:46%"><div style="position:relative;background:var(--line);
+        border-radius:4px;height:16px">${ciBar}
+        <div style="position:absolute;left:0;width:${w}%;height:100%;
+          background:var(--accent);border-radius:4px;opacity:.9"></div></div></td>
+      <td class="num">${(row.total_effect*100).toFixed(1)}%</td>
+      <td class="num" style="color:var(--dim);font-size:12px">${ciText}</td></tr>`;
+  }).join("");
+
+  const verdict = r.rows.length < 2 ? "" : (r.resolved
+    ? `<div class="why" style="margin-top:10px;color:var(--dim);font-size:12px">
+         The lead is statistically resolved &mdash; the top input's interval clears
+         the runner-up's.</div>`
+    : `<div class="caveat"><span class="ic">!</span><span>The top two inputs
+         <strong>overlap within their confidence intervals</strong>. The order shown
+         is not yet evidence for choosing one over the other &mdash; raise
+         &ldquo;precision of the ranking&rdquo; before acting on it.</span></div>`);
+
+  return `
+    <h2>What is driving the spread</h2>
+    <div class="band ${r.resolved ? "total" : ""}">
+      <div class="lab"><span>${r.resolved ? "measure this first" : "leading candidate"}</span></div>
+      <div class="val">${esc(top.name)}</div>
+      <div class="why">Accounts for ${(top.total_effect*100).toFixed(0)}% of the variance in your
+        answer${top.total_interval ? ` (95% CI ${(top.total_interval[0]*100).toFixed(0)}–${(top.total_interval[1]*100).toFixed(0)}%)` : ""}.
+        Narrowing it shrinks the interval more than anything else you could do.</div>
+    </div>
+    <table><tr><th>Input</th><th>Share of spread</th>
+      <th style="text-align:right">Total</th><th style="text-align:right">95% CI</th></tr>${bars}</table>
+    ${verdict}
+    <div class="hint" style="margin-top:12px">
+      ${r.n_model_evaluations.toLocaleString()} model evaluations &middot;
+      interaction strength ${fmt(r.interaction_strength,3)}
+    </div>
+    ${caveats(r.warnings)}`;
+}
+</script>
+</body>
+</html>

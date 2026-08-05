@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "universal-stochastic-sandbox"
+version = "1.2.0"
+description = "Non-case-limited, statistically bounded sample data simulator and analyser"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+keywords = [
+    "monte-carlo", "simulation", "uncertainty-quantification", "bayesian",
+    "sensitivity-analysis", "sobol", "calibration", "statistics",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "polars>=0.20",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.urls]
+Documentation = "https://github.com/thatguywow/universal-stochastic-sandbox/blob/main/GUIDE.md"
+Source = "https://github.com/thatguywow/universal-stochastic-sandbox"
+
+[project.scripts]
+uss = "uss.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+uss = ["static/*.html", "py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP", "SIM", "RUF"]
+# RUF046: int(round(x)) is deliberate. round() on a numpy scalar returns a numpy
+# scalar, not a Python int, and these values index arrays and feed exact-interval
+# constructions where the distinction matters.
+ignore = ["E501", "E731", "B008", "RUF046"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E741"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
