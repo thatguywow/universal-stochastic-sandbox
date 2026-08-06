@@ -21,7 +21,7 @@ Verify:
 .venv\Scripts\python -m pytest -q
 ```
 
-Expect `274 passed`.
+Expect `289 passed`.
 
 ### Running commands
 
@@ -58,9 +58,16 @@ no accounts, nothing leaves the machine. Stop it with Ctrl+C.
 
 | Tab | Answers |
 |---|---|
+| **Start here** | the concepts, with reference tables computed live by the engine |
 | **Simulate** | "What does this distribution look like, given parameters I trust?" |
 | **Uncertainty** | "…and how wrong could my parameters be?" — the tab that produces a defensible number |
 | **What to measure** | "Which unknown should I go collect data on first?" |
+
+On the Uncertainty tab, the parameter name is a dropdown of what the chosen
+distribution actually reads. One uncertain input per parameter — a Bernoulli
+takes only `probability`, so there is nothing to add a second input *for*. To
+model several uncertain quantities feeding one outcome, use a `ScenarioGraph`
+(§5); that is the construct built for it.
 
 The Uncertainty tab deliberately labels the two intervals **ignore this one**
 and **quote this one**. That is the single most common misreading of this

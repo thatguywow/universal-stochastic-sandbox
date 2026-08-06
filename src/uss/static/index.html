@@ -613,12 +613,25 @@ function renderEvidence(){
     const first = c.params.length ? c.params[0].name : "probability";
     evidenceRows = [newRow(first, naturalEvidence($("#p-class").value))];
   }
+  // The parameter name must be one the chosen distribution actually reads.
+  // Free text let you invent "probability 2", which was sampled, listed in the
+  // results table, then silently discarded by the sampler -- an answer that
+  // looked like it accounted for two inputs but did not.
+  const available = (classOf($("#p-class").value)?.params || []).map(p => p.name);
+
   $("#p-evidence").innerHTML = evidenceRows.map((row,i) => {
     const k = EV_KINDS[row.kind];
+    const taken = evidenceRows.filter((_,j) => j !== i).map(r => r.param);
+    const options = available.filter(n => !taken.includes(n) || n === row.param);
+    const nameField = options.length
+      ? `<select data-i="${i}" data-f="param">
+           ${options.map(n => `<option value="${esc(n)}" ${n===row.param?"selected":""}>${esc(n)}</option>`).join("")}
+         </select>`
+      : `<input type="text" data-i="${i}" data-f="param" value="${esc(row.param)}"
+                placeholder="parameter name">`;
     return `<div class="evrow">
       <div class="top">
-        <input type="text" data-i="${i}" data-f="param" value="${esc(row.param)}"
-               placeholder="parameter name">
+        ${nameField}
         ${evidenceRows.length>1?`<button class="rm" data-rm="${i}">×</button>`:""}
       </div>
       <label>Evidence type</label>
@@ -649,7 +662,23 @@ function renderEvidence(){
   });
 }
 $("#p-add").onclick = () => {
-  evidenceRows.push(newRow("", naturalEvidence($("#p-class").value)));
+  // Only offer parameters this distribution has left. Adding more than it
+  // reads produced inputs that were sampled and then thrown away.
+  const available = (classOf($("#p-class").value)?.params || []).map(p => p.name);
+  const taken = evidenceRows.map(r => r.param);
+  const free = available.filter(n => !taken.includes(n));
+  if (!free.length){
+    const c = classOf($("#p-class").value);
+    alert(
+      `"${c.describe}" takes ${available.length} parameter` +
+      (available.length === 1 ? "" : "s") + ` (${available.join(", ")}), ` +
+      `and you have entered evidence for ${available.length === 1 ? "it" : "all of them"}.\n\n` +
+      `To combine several uncertain quantities, build a ScenarioGraph in Python ` +
+      `— see GUIDE.md section 5.`
+    );
+    return;
+  }
+  evidenceRows.push(newRow(free[0], naturalEvidence($("#p-class").value)));
   renderEvidence();
 };
 $("#p-class").onchange = () => { evidenceRows = []; renderEvidence(); };

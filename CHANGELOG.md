@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.2.1
+
+### Fixed — unrecognised parameters were silently discarded
+
+Samplers accept `**kwargs` so a shared parameter dict can be passed between
+layers. Any name a sampler did not recognise therefore vanished without trace,
+and the engine still reported a confident interval around the result:
+
+- `execute_query("gaussian", {"men": 20})` returned **-0.003** instead of 20 —
+  the typo fell through to the default of 0.0.
+- On the Uncertainty tab, a second uncertain input added to a one-parameter
+  distribution was drawn from its posterior, listed in the results table, and
+  counted in the "2 posterior(s)" caveat — then dropped by the sampler without
+  affecting the answer at all.
+
+`QueryClass.sample` now derives its accepted names from the sampler signature
+and rejects anything else, with a near-miss suggestion (`did you mean 'mean'?`).
+Custom registered classes are covered automatically. The web interface offers
+the parameter name as a dropdown of what the chosen distribution actually reads,
+and refuses to add more inputs than it has parameters, pointing at
+`ScenarioGraph` for genuinely multi-quantity models.
+
 ## 1.2.0
 
 Statistical rigour pass. Each item was a defect that produced plausible numbers,

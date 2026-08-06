@@ -206,6 +206,50 @@ def test_surveyed_proportion_is_not_flagged_as_unresolvable(server) -> None:
     assert r["point_estimate"] == pytest.approx(0.40, abs=0.02)
 
 
+def test_extra_posterior_on_one_parameter_class_is_a_client_error(server) -> None:
+    """The exact payload the Uncertainty tab used to send happily.
+
+    'probability 2' was drawn from, listed in the results table, counted in the
+    '2 posterior(s)' caveat, then discarded by the sampler.
+    """
+    status, body = post_expect_error(server, "/api/priors", {
+        "query_class": "bernoulli",
+        "posteriors": {
+            "probability": {"kind": "proportion", "successes": 32, "trials": 152},
+            "probability 2": {"kind": "proportion", "successes": 28, "trials": 140},
+        },
+        "inner_sample_size": 20_000,
+        "parameter_draws": 50,
+    })
+    assert status == 400
+    assert "probability 2" in body["error"]
+    assert "does not accept" in body["error"]
+
+
+def test_multi_parameter_class_still_accepts_two_posteriors(server) -> None:
+    r = post(server, "/api/priors", {
+        "query_class": "gaussian",
+        "posteriors": {
+            "mean": {"kind": "measurements", "observations": [10, 12, 9, 11, 13]},
+            "std_dev": {"kind": "measurements", "observations": [2.0, 2.2, 1.9, 2.1]},
+        },
+        "inner_sample_size": 20_000,
+        "parameter_draws": 64,
+    })
+    assert r["total_interval"] is not None
+    assert set(r["posteriors"]) == {"mean", "std_dev"}
+
+
+def test_typo_in_a_query_parameter_is_rejected(server) -> None:
+    status, body = post_expect_error(server, "/api/query", {
+        "query_class": "gaussian",
+        "parameters": {"men": 20.0, "std_dev": 3.0},
+        "sample_size": 10_000,
+    })
+    assert status == 400
+    assert "did you mean 'mean'" in body["error"]
+
+
 def test_sensitivity_endpoint_ranks_inputs(server) -> None:
     r = post(server, "/api/sensitivity", {
         "query_class": "gaussian",

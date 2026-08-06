@@ -62,7 +62,7 @@ The `uss` command installs into the venv. Activate it, or call
 `.` alone installs the tool; `.[dev]` adds pytest and ruff. If `pytest` reports
 *no module named pytest*, you installed without the extra.
 
-Verified from a clean clone: 274 tests, lint, CLI, examples and the web
+Verified from a clean clone: 289 tests, lint, CLI, examples and the web
 interface all pass on a fresh install.
 
 ## Use
@@ -168,8 +168,9 @@ Every one of these was a bug first, found by testing against something external.
 | Sobol tests model determinism directly | shared noise deflates indices, independent noise inflates them — index sums can't distinguish the two |
 | MCMC reports R-hat and ESS | a mistuned chain returned mean 0.19 against a truth of 2.0 while looking healthy |
 | Odds-ratio shifts, not `p × multiplier` | at p=0.9, multipliers 1.2 and 5.0 both clip to exactly 1.0 |
+| Unknown parameter names are refused | `**kwargs` swallowed them: `gaussian` with `men=20` returned **-0.003**, and an extra posterior was sampled, reported, then discarded |
 
-**274 tests.** Samplers are checked against analytic truth (Poisson
+**289 tests.** Samplers are checked against analytic truth (Poisson
 mean/variance, Gumbel's `loc + scale·γ`, Ishigami's Sobol indices); intervals
 against measured coverage over repeated trials; diagnostics against deliberately
 broken inputs.

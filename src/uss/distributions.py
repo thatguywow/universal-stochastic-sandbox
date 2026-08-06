@@ -13,6 +13,8 @@ non-case-limited without touching `uss.core`.
 
 from __future__ import annotations
 
+import difflib
+import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -60,7 +62,42 @@ class QueryClass:
     describe: str
     params: tuple[ParamSpec, ...] = ()
 
+    def accepted_parameters(self) -> frozenset[str]:
+        """Names this sampler actually reads, taken from its signature.
+
+        Derived rather than declared, so custom registered classes are covered
+        automatically and the list cannot drift from the implementation.
+        """
+        sig = inspect.signature(self.sampler)
+        return frozenset(
+            name
+            for name, param in sig.parameters.items()
+            if name != "u"
+            and param.kind
+            not in (inspect.Parameter.VAR_KEYWORD, inspect.Parameter.VAR_POSITIONAL)
+        )
+
     def sample(self, u: np.ndarray, **parameters: Any) -> np.ndarray:
+        # Samplers accept **kwargs so a shared parameter dict can be passed
+        # around, which means an unrecognised name would otherwise vanish in
+        # silence. That produced confident wrong answers: `gaussian` given
+        # `men=20` quietly used the default 0.0, and a second posterior on a
+        # one-parameter distribution was sampled, reported in the results table,
+        # and then discarded without affecting anything.
+        accepted = self.accepted_parameters()
+        unknown = sorted(set(parameters) - accepted)
+        if unknown:
+            hints = []
+            for name in unknown:
+                close = difflib.get_close_matches(name, accepted, n=1, cutoff=0.6)
+                hints.append(
+                    repr(name) + (f" (did you mean {close[0]!r}?)" if close else "")
+                )
+            raise ValueError(
+                f"query class {self.name!r} does not accept "
+                + ", ".join(hints)
+                + f". It takes: {', '.join(sorted(accepted)) or 'no parameters'}."
+            )
         return self.sampler(u, **parameters)
 
     def defaults(self) -> dict[str, float]:
