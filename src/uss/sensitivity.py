@@ -313,14 +313,23 @@ def parameter_sensitivity(
         draws = np.sort(post.sample(max(20_000, n_base), rng))
         quantile_grids[name] = draws
 
+    # Precompute the grid positions once; np.interp gives the linear inverse.
+    _positions = {name: np.linspace(0.0, 1.0, g.size) for name, g in quantile_grids.items()}
+
     def model(unit_rows: np.ndarray) -> np.ndarray:
         out = np.empty(unit_rows.shape[0], dtype=np.float64)
         for row in range(unit_rows.shape[0]):
             params = dict(fixed or {})
             for j, name in enumerate(names):
-                grid = quantile_grids[name]
-                idx = min(int(unit_rows[row, j] * grid.size), grid.size - 1)
-                params[name] = float(grid[idx])
+                # Interpolate between grid points rather than snapping to the
+                # nearest. Nearest-neighbour turns a smooth posterior into a step
+                # function -- measured up to 1.7e-3 away from the true inverse --
+                # and Sobol decomposition assumes the inputs vary smoothly.
+                params[name] = float(
+                    np.interp(
+                        unit_rows[row, j], _positions[name], quantile_grids[name]
+                    )
+                )
             out[row] = float(simulate(params))
         return out
 

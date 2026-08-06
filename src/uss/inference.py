@@ -392,6 +392,16 @@ def propagate(
     if not posteriors:
         raise ValueError("propagate requires at least one posterior")
 
+    # A name in both places would have the posterior silently win, so the fixed
+    # value the caller supplied would be ignored without a word.
+    clash = sorted(set(fixed or {}) & set(posteriors))
+    if clash:
+        raise ValueError(
+            f"{', '.join(repr(c) for c in clash)} given as both a fixed value and "
+            "a posterior. Supply each parameter once: fixed if you are certain of "
+            "it, a posterior if you are not."
+        )
+
     drawn = {name: post.sample(n_parameter_draws, rng) for name, post in posteriors.items()}
     results = np.empty(n_parameter_draws, dtype=np.float64)
 

@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.2.2
+
+External review pass. Of eighteen reported issues, three were not defects and
+are now pinned by tests so nobody "fixes" working code: the MCMC loop is O(n)
+(the tail fill sits outside the inner loop — measured 2.00 / 1.83 / 1.86 µs per
+sample as the chain grows), the empirical sampler clamps rather than
+extrapolating (`np.interp` does not extrapolate), and `samples_for_proportion`
+met its target in the reported case.
+
+### Fixed
+
+- **Server errors left no trace.** HTTP logging is suppressed to keep the
+  console readable, and the 500 handler returned the message without printing
+  the traceback anywhere — a bug in the interface was undiagnosable. Unexpected
+  exceptions now print a traceback to stderr; `ValueError` still returns a clean
+  400, since there the message is the whole diagnosis.
+- **`confidence_level` was ignored by two endpoints.** `/api/priors` and
+  `/api/sensitivity` always used 95% regardless of the request. Verified end to
+  end: 80% now yields a width of 0.114 against 0.176 at 95%.
+- **No ceiling on replication counts.** `parameter_draws` and `n_base` were
+  uncapped, so one request could ask for trillions of inner samples and hang the
+  process. Capped at 5,000 and 20,000.
+- **Sobol inverted posteriors by nearest-neighbour snapping**, turning a smooth
+  posterior into a step function up to 1.7e-3 away from the true inverse. Now
+  linear interpolation, which the decomposition's smoothness assumption needs.
+- **`gamma` and `weibull_min` were fit candidates mapping to an empty query
+  class** — winning the AIC ranking produced a result that could not be sampled.
+  Both are now registered query classes with parameter translation.
+- **`propagate` let a posterior silently override a fixed value** of the same
+  name. Now rejected.
+- **Antithetic rounding is disclosed** when an odd `sample_size` is floored.
+- Test count in the interface no longer disagrees with the README.
+
 ## 1.2.1
 
 ### Fixed — unrecognised parameters were silently discarded

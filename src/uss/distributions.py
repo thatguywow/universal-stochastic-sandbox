@@ -248,6 +248,24 @@ def _lognormal(
     return stats.lognorm.ppf(u, s=sigma, scale=np.exp(mu))
 
 
+def _gamma(u: np.ndarray, shape: float = 2.0, scale: float = 1.0, **_: Any) -> np.ndarray:
+    """Waiting time for several events; the workhorse for positive skewed data."""
+    k = _param(shape, "shape")
+    theta = _param(scale, "scale")
+    _require(k > 0, f"shape must be positive, got {shape}")
+    _require(theta > 0, f"scale must be positive, got {scale}")
+    return stats.gamma.ppf(u, a=k, scale=theta)
+
+
+def _weibull(u: np.ndarray, shape: float = 1.5, scale: float = 1.0, **_: Any) -> np.ndarray:
+    """Time to failure with a wear-in or wear-out trend."""
+    k = _param(shape, "shape")
+    lam = _param(scale, "scale")
+    _require(k > 0, f"shape must be positive, got {shape}")
+    _require(lam > 0, f"scale must be positive, got {scale}")
+    return lam * np.power(-np.log1p(-u), 1.0 / k)
+
+
 def _empirical(u: np.ndarray, quantiles: np.ndarray, **_: Any) -> np.ndarray:
     """Non-parametric sampling from a fitted empirical quantile function."""
     q = np.asarray(quantiles, dtype=np.float64)
@@ -318,6 +336,30 @@ register(
         (
             ParamSpec("mean", 0.0, "Log-scale mean", None, None, 0.1),
             ParamSpec("std_dev", 1.0, "Log-scale spread", 1e-12, None, 0.1),
+        ),
+    )
+)
+register(
+    QueryClass(
+        "gamma",
+        _gamma,
+        "continuous",
+        "Waiting time for several events (positive, skewed)",
+        (
+            ParamSpec("shape", 2.0, "Shape (k)", 1e-12, None, 0.1),
+            ParamSpec("scale", 1.0, "Scale", 1e-12, None, 0.1),
+        ),
+    )
+)
+register(
+    QueryClass(
+        "weibull",
+        _weibull,
+        "continuous",
+        "Time to failure with wear-in or wear-out",
+        (
+            ParamSpec("shape", 1.5, "Shape (k)", 1e-12, None, 0.1),
+            ParamSpec("scale", 1.0, "Scale", 1e-12, None, 0.1),
         ),
     )
 )

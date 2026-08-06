@@ -28,8 +28,8 @@ CANDIDATE_FAMILIES: dict[str, str] = {
     "expon": "exponential",
     "gumbel_r": "extreme_value",
     "genextreme": "extreme_value",
-    "gamma": "",
-    "weibull_min": "",
+    "gamma": "gamma",
+    "weibull_min": "weibull",
 }
 
 
@@ -184,6 +184,12 @@ def _to_query_parameters(family: str, params: tuple[float, ...]) -> dict[str, An
     if family == "genextreme":
         c, loc, scale = params
         return {"loc": float(loc), "scale": float(scale), "shape": float(-c)}
+    if family == "gamma":
+        a, _loc, scale = params
+        return {"shape": float(a), "scale": float(scale)}
+    if family == "weibull_min":
+        c, _loc, scale = params
+        return {"shape": float(c), "scale": float(scale)}
     return {}
 
 

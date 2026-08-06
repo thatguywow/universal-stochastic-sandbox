@@ -139,6 +139,7 @@ class UniversalStochasticSandbox:
             # An odd n cannot be split into pairs; report what actually ran
             # rather than the requested figure, so sample_size never overstates
             # the work done.
+            requested = n
             n = (n // 2) * 2
             if n < 2:
                 raise ValueError(
@@ -167,6 +168,11 @@ class UniversalStochasticSandbox:
             raw_min, raw_max = float(marginal.min()), float(marginal.max())
             quantiles = self._quantiles(marginal)
             report.variance = float(marginal.astype(np.float64, copy=False).var(ddof=1))
+            if requested != n:
+                report.caveats.append(
+                    f"antithetic sampling needs whole pairs, so {requested:,} was "
+                    f"rounded down to {n:,} draws"
+                )
         else:
             samples = self._draw(qc, params, n)
             report = estimators.summarize(

@@ -21,7 +21,7 @@ Verify:
 .venv\Scripts\python -m pytest -q
 ```
 
-Expect `289 passed`.
+Expect `301 passed`.
 
 ### Running commands
 
@@ -133,6 +133,8 @@ gaussian  n=1,000,000  (0.063s)
 | `extreme_value` | continuous | `loc`, `scale`, `shape` | tail risk, records, maxima |
 | `exponential` | continuous | `rate` | waiting times |
 | `lognormal` | continuous | `mean`, `std_dev` | multiplicative growth, durations |
+| `gamma` | continuous | `shape`, `scale` | waiting time for several events |
+| `weibull` | continuous | `shape`, `scale` | time to failure, wear-in/wear-out |
 | `empirical` | continuous | `quantiles` | a fitted real dataset |
 
 `shape` on `extreme_value` is the EVT ξ: `0` is Gumbel, `>0` Fréchet, `<0` Weibull.

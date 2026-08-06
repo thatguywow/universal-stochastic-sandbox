@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import threading
+import traceback
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -28,7 +29,14 @@ from .inference import Posterior, update_bernoulli, update_gaussian_mean, update
 from .sensitivity import parameter_sensitivity
 
 _STATIC = Path(__file__).parent / "static"
+
+# Every request runs unbounded numerical work, so each knob a caller can turn
+# needs a ceiling. Without caps on the replication counts, `parameter_draws`
+# multiplied by `inner_sample_size` reaches trillions of samples from a single
+# request and the process hangs or is killed by the OOM reaper.
 MAX_SAMPLES = 20_000_000
+MAX_PARAMETER_DRAWS = 5_000
+MAX_SOBOL_BASE = 20_000
 MAX_HIST_BINS = 60
 
 
@@ -156,8 +164,13 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             self._send(handler(body))
         except ValueError as exc:
+            # Expected: bad input. The message is the whole diagnosis.
             self._send({"error": str(exc)}, 400)
         except Exception as exc:
+            # Unexpected: a real defect. HTTP logging is suppressed to keep the
+            # console readable, so without this the traceback goes nowhere and a
+            # bug in the interface leaves no diagnostic trace at all.
+            traceback.print_exc()
             self._send({"error": f"{type(exc).__name__}: {exc}"}, 500)
 
     # -- endpoints --------------------------------------------------------
@@ -205,7 +218,8 @@ class _Handler(BaseHTTPRequestHandler):
         name = body.get("query_class", "bernoulli")
         n = min(int(body.get("sample_size", 200_000)), MAX_SAMPLES)
         inner = min(int(body.get("inner_sample_size", 50_000)), MAX_SAMPLES)
-        draws = int(body.get("parameter_draws", 400))
+        draws = min(int(body.get("parameter_draws", 400)), MAX_PARAMETER_DRAWS)
+        confidence = float(body.get("confidence_level", 0.95))
 
         posteriors = {
             key: _build_posterior(spec)
@@ -221,6 +235,7 @@ class _Handler(BaseHTTPRequestHandler):
             fixed={k: float(v) for k, v in (body.get("fixed") or {}).items()},
             n_parameter_draws=draws,
             inner_sample_size=inner,
+            confidence_level=confidence,
             domain=body.get("domain") or None,
         )
         report = result.report
@@ -229,7 +244,7 @@ class _Handler(BaseHTTPRequestHandler):
         posterior_previews = {
             key: {
                 "mean": post.mean,
-                "interval": list(post.interval(0.95)),
+                "interval": list(post.interval(confidence)),
                 "n_observations": post.n_observations,
                 "samples": [float(v) for v in post.sample(4000, rng)],
             }
@@ -301,7 +316,8 @@ class _Handler(BaseHTTPRequestHandler):
 
         fixed = {k: float(v) for k, v in (body.get("fixed") or {}).items()}
         inner = min(int(body.get("inner_sample_size", 20_000)), 200_000)
-        base = int(body.get("n_base", 2_000))
+        base = min(int(body.get("n_base", 2_000)), MAX_SOBOL_BASE)
+        confidence = float(body.get("confidence_level", 0.95))
 
         # Deterministic given the parameters: the uniform stream is fixed, so
         # repeated evaluations at identical inputs agree. Sobol requires that.
@@ -312,7 +328,12 @@ class _Handler(BaseHTTPRequestHandler):
             return float(qc.sample(fixed_u, **merged).astype(np.float64).mean())
 
         res = parameter_sensitivity(
-            simulate, posteriors, base, np.random.default_rng(11), fixed=fixed
+            simulate,
+            posteriors,
+            base,
+            np.random.default_rng(11),
+            fixed=fixed,
+            confidence_level=confidence,
         )
 
         def interval_for(name: str) -> list[float] | None:

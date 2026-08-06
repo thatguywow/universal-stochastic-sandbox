@@ -37,13 +37,29 @@ class SamplePlan:
     achieved_half_width: float
     assumed_rate: float
     confidence_level: float
+    target_half_width: float | None = None
+
+    @property
+    def meets_target(self) -> bool:
+        """Whether the plan actually reaches the precision that was asked for."""
+        if self.target_half_width is None:
+            return True
+        return self.achieved_half_width <= self.target_half_width * (1 + 1e-9)
 
     def summary(self) -> str:
-        return (
+        text = (
             f"count {self.n_required:,} to reach +/-{self.achieved_half_width:.1%} "
             f"at {self.confidence_level:.0%} confidence "
             f"(assuming a rate near {self.assumed_rate:.0%})"
         )
+        if not self.meets_target:
+            text += (
+                f"\n  ! this does NOT meet the requested "
+                f"+/-{self.target_half_width:.2%}: the search stopped at the "
+                f"{_MAX_N:,} cap. A proportion cannot be pinned that tightly at "
+                "any practical sample size."
+            )
+        return text
 
 
 def proportion_half_width(n: int, assumed_rate: float = 0.5, confidence_level: float = 0.95) -> float:
@@ -90,6 +106,7 @@ def samples_for_proportion(
         achieved_half_width=proportion_half_width(n, assumed_rate, confidence_level),
         assumed_rate=assumed_rate,
         confidence_level=confidence_level,
+        target_half_width=target_half_width,
     )
 
 
