@@ -21,7 +21,7 @@ Verify:
 .venv\Scripts\python -m pytest -q
 ```
 
-Expect `301 passed`.
+Expect `315 passed`.
 
 ### Running commands
 
@@ -61,6 +61,7 @@ no accounts, nothing leaves the machine. Stop it with Ctrl+C.
 | **Start here** | the concepts, with reference tables computed live by the engine |
 | **Simulate** | "What does this distribution look like, given parameters I trust?" |
 | **Uncertainty** | "…and how wrong could my parameters be?" — the tab that produces a defensible number |
+| **Compare** | "Is B better than A, and by how much?" |
 | **What to measure** | "Which unknown should I go collect data on first?" |
 
 On the Uncertainty tab, the parameter name is a dropdown of what the chosen
@@ -93,6 +94,8 @@ the main way to get a confident wrong answer.
 | "I have no data and need a decision" | `breakeven` | [3.5](#running-it-backwards-what-would-change-your-mind) |
 | "What's the distribution of X, given parameters I trust?" | `execute_query` | [2](#2-a-single-query) |
 | "…and how wrong could my parameters be?" | `execute_with_priors` | [4](#4-when-you-dont-trust-your-inputs) |
+| "Is B better than A?" | `compare` | [4.5](#45-comparing-two-options) |
+| "Which of these several options should I pick?" | `rank` | [4.5](#45-comparing-two-options) |
 | "X depends on Y which depends on Z" | `ScenarioGraph` | [5](#5-multi-stage-scenarios) |
 | "Which assumption should I go measure?" | `parameter_sensitivity` | [6](#6-where-to-spend-your-next-hour) |
 | "Should I believe these intervals at all?" | `coverage_curve` / `pit_report` | [7](#7-checking-the-engine-is-honest) |
@@ -320,6 +323,69 @@ measured.
 > the simulation's discretisation grid rather than your posterior. The engine
 > detects this and adds a `quantised by the inner simulation grid` caveat — if
 > you see it, raise `inner_sample_size`.
+
+---
+
+## 4.5 Comparing two options
+
+Section 4 handles **one** distribution whose parameters are uncertain. Comparing
+**two separate things** — control against variant, this month against last — is a
+different shape, and adding more parameters on the Uncertainty tab does *not* do
+it. Those parameters fill different slots of one distribution (a Gaussian's
+`mean` and `std_dev`); they are not two things being contrasted.
+
+```python
+from uss import compare, update_bernoulli
+
+result = compare(
+    update_bernoulli(30, 500),   # control: 30 of 500 converted
+    update_bernoulli(45, 500),   # variant: 45 of 500
+    names=("control", "variant"),
+)
+print(result.summary())
+```
+
+```
+control          0.0618   [0.0424, 0.0844]
+variant          0.0916   [0.0680, 0.1183]
+
+difference      +0.0298   95% [-0.0029, +0.0629]
+relative         +52.8%   95% [-3.9%, +132.6%]
+P(variant > control) = 96.3%
+
+-> NOT RESOLVED. The interval on the difference includes zero, so
+   'no difference' remains consistent with this data.
+```
+
+**Read that carefully — it is the whole point of the module.** A 52.8% lift and a
+96.3% chance of winning, and the effect is still not established. Both numbers
+are correct and they answer different questions:
+
+| Quantity | Answers |
+|---|---|
+| `probability_b_beats_a` | is the **direction** right? |
+| `difference_interval` | how **large** is the effect? |
+
+Shipping on the first alone is how a result that might be nothing gets called a
+win. `resolved` is True only when the interval excludes zero; `better` returns
+`None` until then.
+
+### More than two options
+
+```python
+from uss import rank
+
+for name, p in rank({"a": post_a, "b": post_b, "c": post_c}):
+    print(f"{name}  P(best) = {p:.1%}")
+```
+
+Pairwise tests multiply and mislead across many arms. `rank` gives the share of
+draws in which each option comes out on top — the quantity that actually answers
+"which should I pick". A flat result (everything near 1/k) means the data cannot
+separate them, however different the point estimates look.
+
+**Independence is assumed.** It holds for separately-collected samples; it does
+not when the two estimates share observations, and `compare` cannot detect that.
 
 ---
 

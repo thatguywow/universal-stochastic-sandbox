@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.3.0
+
+### Added — comparing two options
+
+Adding more uncertain parameters was never a comparison: they fill different
+slots of a single distribution. Contrasting two separate quantities is a
+different shape, and it was the most common real question the engine could not
+answer directly.
+
+`uss.compare` samples both posteriors and subtracts draw by draw, so the
+reported interval carries the uncertainty of both sides. It exists to stop one
+specific mistake:
+
+```
+P(variant > control) = 96.3%          sounds decisive
+95% interval on the difference: [-0.003, +0.063]    includes zero
+```
+
+Both are correct. The first says the direction is probably right; the second
+says the effect size is not established. `resolved` is True only when the
+interval excludes zero, `better` returns None until then, and the disagreement
+is raised as a caveat.
+
+`rank` extends this to several options, giving each one's probability of being
+the best — pairwise tests multiply and mislead across many arms.
+
+A **Compare** tab in the web interface covers both: two options give a
+difference, three or more give a ranking.
+
 ## 1.2.2
 
 External review pass. Of eighteen reported issues, three were not defects and

@@ -119,6 +119,7 @@
   <button data-tab="info" class="on">Start here</button>
   <button data-tab="query">Simulate</button>
   <button data-tab="priors">Uncertainty</button>
+  <button data-tab="compare">Compare</button>
   <button data-tab="sens">What to measure</button>
 </nav>
 
@@ -259,7 +260,7 @@
           autocorrelation-adjusted effective sample size; non-convergence is
           reported rather than hidden.</li>
         </ul>
-        <p class="note">301 tests. Samplers are checked against analytic truth and
+        <p class="note">315 tests. Samplers are checked against analytic truth and
         intervals against measured coverage, not merely for running without error.</p>
       </div>
 
@@ -347,6 +348,27 @@
     </div>
   </section>
 
+  <!-- ============================= COMPARE ============================= -->
+  <section id="tab-compare" class="grid" hidden>
+    <div class="card">
+      <h2>Compare two options</h2>
+      <div class="hint">
+        Control against variant, this month against last. Each side needs its own
+        counts. The comparison carries the uncertainty of <em>both</em>, which is
+        why a big-looking lift can still be indistinguishable from nothing.
+      </div>
+      <div id="c-arms"></div>
+      <button class="addbtn" id="c-add">+ add another option</button>
+      <button class="go" id="c-run">Compare</button>
+    </div>
+    <div class="card" id="c-out">
+      <div class="muted">
+        Enter the counts for each option and run it.<br>
+        Two options gives a difference; three or more gives a ranking.
+      </div>
+    </div>
+  </section>
+
   <!-- ========================= WHAT TO MEASURE ========================= -->
   <section id="tab-sens" class="grid" hidden>
     <div class="card">
@@ -394,7 +416,7 @@ async function api(path, body) {
 }
 
 /* ---------------------------------------------------------------- tabs */
-const TABS = ["info","query","priors","sens"];
+const TABS = ["info","query","priors","compare","sens"];
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
   TABS.forEach(t => $("#tab-" + t).hidden = (t !== b.dataset.tab));
@@ -459,7 +481,7 @@ async function loadReference(){
 
   $("#q-class").value = "gaussian";
   $("#p-class").value = "bernoulli";
-  renderParams(); renderEvidence(); loadReference();
+  renderParams(); renderEvidence(); renderArms(); loadReference();
 })().catch(e => document.body.insertAdjacentHTML("afterbegin",
   `<div class="err" style="margin:20px">${esc(e.message)}</div>`));
 
@@ -797,6 +819,155 @@ function renderPriors(r){
       An input has <strong>zero observations</strong>. Its central value comes entirely
       from the prior, not from data &mdash; the true value could be zero. Report the
       upper end of its range as a bound, not the centre as an estimate.</span></div>` : ""}
+    ${caveats(r.caveats)}`;
+}
+
+/* ----------------------------------------------------------- compare */
+let compareArms = [
+  {name:"control", kind:"proportion", vals:defaultsFor("proportion")},
+  {name:"variant", kind:"proportion", vals:defaultsFor("proportion")},
+];
+
+function renderArms(){
+  $("#c-arms").innerHTML = compareArms.map((arm,i) => {
+    const k = EV_KINDS[arm.kind];
+    return `<div class="evrow">
+      <div class="top">
+        <input type="text" data-ci="${i}" data-cf="name" value="${esc(arm.name)}"
+               placeholder="option name">
+        ${compareArms.length>2?`<button class="rm" data-crm="${i}">×</button>`:""}
+      </div>
+      <label>Evidence type</label>
+      <select data-ci="${i}" data-cf="kind">
+        ${Object.entries(EV_KINDS).map(([kk,vv]) =>
+          `<option value="${kk}" ${kk===arm.kind?"selected":""}>${vv.label}</option>`).join("")}
+      </select>
+      ${k.fields.map(([f,lab]) => `
+        <label>${lab}</label>
+        <input type="text" data-ci="${i}" data-cv="${f}" value="${esc(arm.vals[f] ?? "")}">`).join("")}
+    </div>`;
+  }).join("");
+
+  $("#c-arms").querySelectorAll("[data-cf]").forEach(el => el.onchange = e => {
+    const i = +e.target.dataset.ci;
+    if (e.target.dataset.cf === "kind"){
+      compareArms[i].kind = e.target.value;
+      compareArms[i].vals = defaultsFor(e.target.value);
+    } else compareArms[i].name = e.target.value;
+    renderArms();
+  });
+  $("#c-arms").querySelectorAll("[data-cv]").forEach(el => el.onchange = e => {
+    compareArms[+e.target.dataset.ci].vals[e.target.dataset.cv] = e.target.value;
+  });
+  $("#c-arms").querySelectorAll("[data-crm]").forEach(el => el.onclick = e => {
+    compareArms.splice(+e.target.dataset.crm, 1); renderArms();
+  });
+}
+$("#c-add").onclick = () => {
+  compareArms.push({name:`option ${compareArms.length+1}`, kind:compareArms[0].kind,
+                    vals:defaultsFor(compareArms[0].kind)});
+  renderArms();
+};
+
+function collectArms(){
+  const out = {};
+  for (const arm of compareArms){
+    const name = arm.name.trim();
+    if (!name) throw new Error("every option needs a name");
+    if (out[name]) throw new Error(`two options are both named "${name}"`);
+    const v = arm.vals;
+    if (arm.kind === "proportion"){
+      const successes = num(v.successes, "how many yes"), trials = num(v.trials, "out of how many");
+      if (successes > trials) throw new Error(`"${name}": ${successes} yes out of only ${trials}`);
+      out[name] = {kind:"proportion", successes, trials};
+    } else if (arm.kind === "rate"){
+      const events = num(v.events, "events seen"), exposure = num(v.exposure, "over how much");
+      if (exposure <= 0) throw new Error(`"${name}": exposure must be greater than zero`);
+      out[name] = {kind:"rate", events, exposure};
+    } else {
+      const nums = String(v.observations ?? "").split(",").map(s=>s.trim()).filter(Boolean)
+                     .map(s => num(s, "measurement"));
+      if (nums.length < 2) throw new Error(`"${name}": need at least 2 measurements`);
+      out[name] = {kind:"measurements", observations:nums};
+    }
+  }
+  return out;
+}
+
+$("#c-run").onclick = async () => {
+  const btn = $("#c-run"); btn.disabled = true;
+  const out = $("#c-out");
+  out.innerHTML = `<div class="muted"><span class="spin"></span>comparing…</div>`;
+  try {
+    out.innerHTML = renderCompare(await api("/api/compare", {arms: collectArms()}));
+  } catch(e){ out.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  btn.disabled = false;
+};
+
+function renderCompare(r){
+  const pct = (r.confidence_level*100).toFixed(0);
+  const armRows = Object.entries(r.arms).map(([n,a]) =>
+    `<tr><td>${esc(n)}</td><td class="num">${fmt(a.mean,4)}</td>
+     <td class="num">${fmt(a.interval[0],4)} – ${fmt(a.interval[1],4)}</td>
+     <td class="num">${a.n_observations}</td></tr>`).join("");
+
+  let verdict, body = "";
+  if (r.mode === "pair"){
+    const [dlo, dhi] = r.difference_interval;
+    verdict = r.resolved
+      ? `<div class="band total">
+           <div class="lab"><span>verdict</span><span class="tag quote">resolved</span></div>
+           <div class="val">${esc(r.better)} is better</div>
+           <div class="why">The ${pct}% interval on the difference excludes zero.</div></div>`
+      : `<div class="band" style="border-color:var(--warn)">
+           <div class="lab"><span>verdict</span>
+             <span class="tag" style="border-color:var(--warn);color:var(--warn)">not resolved</span></div>
+           <div class="val">too close to call</div>
+           <div class="why">The ${pct}% interval on the difference includes zero, so
+             &ldquo;no difference&rdquo; is still consistent with this data.</div></div>`;
+    body = `
+      <table>
+        <tr><th>Quantity</th><th style="text-align:right">Estimate</th>
+            <th style="text-align:right">${pct}% interval</th></tr>
+        <tr><td>difference</td><td class="num">${fmt(r.difference,4)}</td>
+            <td class="num">${fmt(dlo,4)} – ${fmt(dhi,4)}</td></tr>
+        <tr><td>relative lift</td><td class="num">${(r.relative_lift*100).toFixed(1)}%</td>
+            <td class="num">${(r.relative_lift_interval[0]*100).toFixed(1)}% –
+                ${(r.relative_lift_interval[1]*100).toFixed(1)}%</td></tr>
+      </table>
+      <div class="band">
+        <div class="lab"><span>probability the second beats the first</span></div>
+        <div class="val">${(r.probability_b_beats_a*100).toFixed(1)}%</div>
+        <div class="why">This is the chance the <em>direction</em> is right. It is not
+          the chance the effect is large enough to matter — read the interval above
+          for that.</div>
+      </div>`;
+  } else {
+    verdict = r.resolved
+      ? `<div class="band total"><div class="lab"><span>verdict</span>
+           <span class="tag quote">resolved</span></div>
+           <div class="val">${esc(r.better)}</div>
+           <div class="why">Wins in the large majority of draws.</div></div>`
+      : `<div class="band" style="border-color:var(--warn)">
+           <div class="lab"><span>verdict</span>
+             <span class="tag" style="border-color:var(--warn);color:var(--warn)">not separated</span></div>
+           <div class="val">no clear leader</div>
+           <div class="why">These options cannot be told apart with this much data.</div></div>`;
+    body = `<table><tr><th>Option</th><th>Chance it is best</th>
+      <th style="text-align:right">P(best)</th></tr>` +
+      r.ranking.map(row => {
+        const w = row.p_best*100;
+        return `<tr><td>${esc(row.name)}</td>
+          <td style="width:50%"><div style="background:var(--line);border-radius:4px;height:16px">
+            <div style="width:${w}%;height:100%;background:var(--accent);border-radius:4px"></div></div></td>
+          <td class="num">${w.toFixed(1)}%</td></tr>`;
+      }).join("") + `</table>`;
+  }
+
+  return `<h2>Result</h2>${verdict}${body}
+    <table><tr><th>Option</th><th style="text-align:right">Rate</th>
+      <th style="text-align:right">${pct}% interval</th>
+      <th style="text-align:right">Observations</th></tr>${armRows}</table>
     ${caveats(r.caveats)}`;
 }
 

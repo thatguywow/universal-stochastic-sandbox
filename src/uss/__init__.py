@@ -18,6 +18,7 @@ from .calibration import (
     pit_values,
     sharpness,
 )
+from .compare import ComparisonResult, compare, rank
 from .core import SimulationResult, UniversalStochasticSandbox
 from .distributions import ParamSpec, QueryClass, available, get, register
 from .estimators import (
@@ -66,6 +67,7 @@ except Exception:
 __all__ = [
     "CONFIDENCE_DOMAINS",
     "Breakeven",
+    "ComparisonResult",
     "CoverageResult",
     "GraphResult",
     "Node",
@@ -82,6 +84,7 @@ __all__ = [
     "available",
     "breakeven",
     "combine_uncertainty",
+    "compare",
     "coverage_curve",
     "exposure_for_rate",
     "garwood_interval",
@@ -96,6 +99,7 @@ __all__ = [
     "propagate",
     "proportion_half_width",
     "proportion_tradeoff",
+    "rank",
     "rate_upper_bound",
     "register",
     "samples_for_proportion",

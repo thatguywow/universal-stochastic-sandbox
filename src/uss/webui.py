@@ -157,6 +157,7 @@ class _Handler(BaseHTTPRequestHandler):
                 "/api/query": self._api_query,
                 "/api/priors": self._api_priors,
                 "/api/sensitivity": self._api_sensitivity,
+                "/api/compare": self._api_compare,
                 "/api/reference": self._api_reference,
             }.get(self.path)
             if handler is None:
@@ -262,6 +263,72 @@ class _Handler(BaseHTTPRequestHandler):
             "posteriors": posterior_previews,
             "elapsed_seconds": result.elapsed_seconds,
         }
+
+    def _api_compare(self, body: dict[str, Any]) -> dict[str, Any]:
+        from .compare import compare as compare_posteriors
+        from .compare import rank as rank_posteriors
+
+        arms = body.get("arms") or {}
+        if len(arms) < 2:
+            raise ValueError("comparison needs at least two options")
+        posteriors = {name: _build_posterior(spec) for name, spec in arms.items()}
+        confidence = float(body.get("confidence_level", 0.95))
+        rng = np.random.default_rng(int(body.get("seed", 42)))
+
+        names = list(posteriors)
+        payload: dict[str, Any] = {
+            "arms": {
+                name: {
+                    "mean": post.mean,
+                    "interval": list(post.interval(confidence)),
+                    "n_observations": post.n_observations,
+                }
+                for name, post in posteriors.items()
+            },
+            "confidence_level": confidence,
+        }
+
+        if len(names) == 2:
+            res = compare_posteriors(
+                posteriors[names[0]],
+                posteriors[names[1]],
+                rng=rng,
+                n_draws=min(int(body.get("n_draws", 200_000)), MAX_SAMPLES),
+                confidence_level=confidence,
+                names=(names[0], names[1]),
+            )
+            payload.update(
+                {
+                    "mode": "pair",
+                    "difference": res.difference,
+                    "difference_interval": list(res.difference_interval),
+                    "relative_lift": res.relative_lift,
+                    "relative_lift_interval": list(res.relative_lift_interval),
+                    "probability_b_beats_a": res.probability_b_beats_a,
+                    "resolved": res.resolved,
+                    "better": res.better,
+                    "caveats": res.caveats,
+                }
+            )
+        else:
+            ranked = rank_posteriors(posteriors, rng=rng)
+            payload.update(
+                {
+                    "mode": "rank",
+                    "ranking": [{"name": n, "p_best": p} for n, p in ranked],
+                    "resolved": ranked[0][1] > 0.9,
+                    "better": ranked[0][0] if ranked[0][1] > 0.9 else None,
+                    "caveats": (
+                        []
+                        if ranked[0][1] > 0.9
+                        else [
+                            f"the leading option wins only {ranked[0][1]:.0%} of "
+                            "draws; this data cannot separate these options"
+                        ]
+                    ),
+                }
+            )
+        return payload
 
     def _api_reference(self, _body: dict[str, Any]) -> dict[str, Any]:
         """Live reference data for the Info tab.
