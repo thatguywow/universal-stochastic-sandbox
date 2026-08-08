@@ -260,7 +260,7 @@
           autocorrelation-adjusted effective sample size; non-convergence is
           reported rather than hidden.</li>
         </ul>
-        <p class="note">315 tests. Samplers are checked against analytic truth and
+        <p class="note">319 tests. Samplers are checked against analytic truth and
         intervals against measured coverage, not merely for running without error.</p>
       </div>
 
@@ -378,6 +378,17 @@
         driving the spread of your answer &mdash; so you know what to go measure
         first. Uses the evidence entered on the Uncertainty tab.
       </div>
+      <label>Rank inputs against which quantity?</label>
+      <select id="s-metric">
+        <option value="mean" selected>the average outcome</option>
+        <option value="spread">how spread out the outcome is</option>
+        <option value="percentile">a high percentile (bad case)</option>
+        <option value="exceedance">chance of exceeding a threshold</option>
+      </select>
+      <div class="hint" id="s-metric-hint"></div>
+
+      <div id="s-metric-arg"></div>
+
       <label>Precision of the ranking</label>
       <select id="s-base">
         <option value="1000">fast</option>
@@ -481,7 +492,7 @@ async function loadReference(){
 
   $("#q-class").value = "gaussian";
   $("#p-class").value = "bernoulli";
-  renderParams(); renderEvidence(); renderArms(); loadReference();
+  renderParams(); renderEvidence(); renderArms(); renderMetricArg(); loadReference();
 })().catch(e => document.body.insertAdjacentHTML("afterbegin",
   `<div class="err" style="margin:20px">${esc(e.message)}</div>`));
 
@@ -972,15 +983,44 @@ function renderCompare(r){
 }
 
 /* -------------------------------------------------------- sensitivity */
+const METRIC_HINTS = {
+  mean: "A scale parameter has <em>no</em> effect on an average — it will score 0% here, exactly, every time. That is arithmetic, not a finding.",
+  spread: "Now scale parameters dominate and location parameters score 0%. The mirror image of the average.",
+  percentile: "Both location and scale move a percentile, so this usually separates them.",
+  exceedance: "How often the outcome crosses a line you care about — normally the closest to an actual decision.",
+};
+
+function renderMetricArg(){
+  const m = $("#s-metric").value;
+  $("#s-metric-hint").innerHTML = METRIC_HINTS[m] || "";
+  if (m === "percentile"){
+    $("#s-metric-arg").innerHTML =
+      `<label>Which percentile</label>
+       <input type="number" id="s-percentile" value="0.95" step="0.01" min="0.01" max="0.99">`;
+  } else if (m === "exceedance"){
+    $("#s-metric-arg").innerHTML =
+      `<label>Threshold to exceed</label>
+       <input type="number" id="s-threshold" value="1" step="0.1">`;
+  } else {
+    $("#s-metric-arg").innerHTML = "";
+  }
+}
+$("#s-metric").onchange = renderMetricArg;
+
 $("#s-run").onclick = async () => {
   const btn = $("#s-run"); btn.disabled = true;
   const out = $("#s-out");
   out.innerHTML = `<div class="muted"><span class="spin"></span>ranking inputs…</div>`;
   try {
-    const r = await api("/api/sensitivity", {
+    const payload = {
       query_class: $("#p-class").value, posteriors: collectPosteriors(),
-      n_base: parseInt($("#s-base").value)
-    });
+      n_base: parseInt($("#s-base").value), metric: $("#s-metric").value
+    };
+    if (payload.metric === "percentile")
+      payload.percentile = num($("#s-percentile").value, "which percentile");
+    if (payload.metric === "exceedance")
+      payload.threshold = num($("#s-threshold").value, "threshold to exceed");
+    const r = await api("/api/sensitivity", payload);
     out.innerHTML = renderSens(r);
   } catch(e){ out.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
   btn.disabled = false;
@@ -1030,6 +1070,7 @@ function renderSens(r){
       <th style="text-align:right">Total</th><th style="text-align:right">95% CI</th></tr>${bars}</table>
     ${verdict}
     <div class="hint" style="margin-top:12px">
+      ranked against <strong>${esc(r.metric || "mean")}</strong> &middot;
       ${r.n_model_evaluations.toLocaleString()} model evaluations &middot;
       interaction strength ${fmt(r.interaction_strength,3)}
     </div>

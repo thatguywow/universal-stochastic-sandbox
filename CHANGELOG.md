@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.3.1
+
+### Fixed — sensitivity could only ever rank against the average
+
+The web endpoint hardcoded `mean(samples)` as the quantity to rank inputs
+against. Since `E[X] = mean` exactly, a scale parameter has *no* effect on that
+quantity, so `std_dev` reported 0% for every distribution, every run — correct
+arithmetic, and useless. The tool was answering a question nobody asked.
+
+Measured on a Gaussian with both parameters uncertain:
+
+| Ranked against | `mean` | `std_dev` |
+|---|---|---|
+| the average outcome | 98.6% | **0.0%** |
+| how spread out it is | 0.0% | **95.9%** |
+| the 95th percentile | 94.7% | 3.5% |
+| P(outcome > 14) | 98.1% | 1.5% |
+
+The endpoint now takes a `metric` — `mean`, `spread`, `percentile` or
+`exceedance` — and the interface asks which one, with a note on what each
+implies. An input scoring under 0.1% is flagged as probably structural rather
+than incidental, pointing at the metric that would reveal it.
+
+The fixed uniform stream is deliberate and stays: Sobol needs a deterministic
+function, and a fresh stream per call makes a scale parameter look influential
+purely through the noise it injects, which the decomposition then scores as
+signal.
+
 ## 1.3.0
 
 ### Added — comparing two options

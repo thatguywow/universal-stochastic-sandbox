@@ -21,7 +21,7 @@ Verify:
 .venv\Scripts\python -m pytest -q
 ```
 
-Expect `315 passed`.
+Expect `319 passed`.
 
 ### Running commands
 
@@ -488,6 +488,44 @@ print(sens.summary())
 - **total** — variance remaining if you learned *everything else*.
 - `total > first` means the input matters through interactions.
 - `interaction_strength ≈ 0` means the model is effectively additive.
+
+### Sensitivity is always *of something* — pick it deliberately
+
+The ranking depends entirely on which summary of the outcome you rank against,
+and the answer can invert completely. For a Gaussian with both `mean` and
+`std_dev` uncertain:
+
+| Ranked against | `mean` | `std_dev` |
+|---|---|---|
+| the average outcome | **98.6%** | 0.0% |
+| how spread out it is | 0.0% | **95.9%** |
+| the 95th percentile | 94.7% | 3.5% |
+| P(outcome > 14) | 98.1% | 1.5% |
+
+None of these is wrong. `E[X] = mean` exactly, so a **scale parameter has no
+effect on an average, ever** — 0% there is arithmetic, not a finding. Against
+the spread it accounts for nearly everything.
+
+The web interface asks which quantity to rank against, and warns when an input
+scores zero that the zero may be structural. In Python you choose by what your
+`simulate` returns:
+
+```python
+def simulate(p):                       # ranks inputs against the average
+    return float(qc.sample(u, **p).mean())
+
+def simulate(p):                       # ranks them against tail risk instead
+    return float((qc.sample(u, **p) > 14.0).mean())
+```
+
+Use the quantity your decision actually turns on. If you care about worst cases,
+ranking against the mean will tell you scale doesn't matter — and it will be
+right about the mean and useless to you.
+
+> Note the `u` above is drawn **once**, outside `simulate`. Sobol requires a
+> deterministic function; a fresh stream per call makes a scale parameter look
+> influential purely through the extra noise it injects, and the decomposition
+> scores that noise as signal.
 
 Cost is `n_base × (n_factors + 2)` model evaluations. Use `one_at_a_time` for a
 rough first pass, but don't act on it — it can't see interactions.

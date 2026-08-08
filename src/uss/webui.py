@@ -388,11 +388,46 @@ class _Handler(BaseHTTPRequestHandler):
 
         # Deterministic given the parameters: the uniform stream is fixed, so
         # repeated evaluations at identical inputs agree. Sobol requires that.
+        # Using a fresh stream per call would make a scale parameter look
+        # influential purely through the extra noise it injects, and the
+        # decomposition would score that noise as signal.
         fixed_u = np.random.default_rng(99).random(inner)
+
+        # Which summary of the sampled distribution to rank inputs against.
+        # This has to be a choice: the answer changes completely with it. For a
+        # Gaussian, E[X] = mean exactly, so a scale parameter has *no* effect on
+        # the mean and always scores 0% -- correct, and useless. Against the
+        # spread of the same distribution it scores 100%.
+        metric_name = str(body.get("metric", "mean"))
+        threshold = body.get("threshold")
+        percentile = float(body.get("percentile", 0.95))
+
+        if metric_name == "mean":
+            summarise = np.mean
+        elif metric_name == "spread":
+            summarise = np.std
+        elif metric_name == "percentile":
+            if not 0.0 < percentile < 1.0:
+                raise ValueError(
+                    f"percentile must lie in (0, 1), got {percentile}"
+                )
+            summarise = lambda s: np.quantile(s, percentile)
+        elif metric_name == "exceedance":
+            if threshold is None:
+                raise ValueError(
+                    "the 'exceedance' metric needs a 'threshold' to exceed"
+                )
+            cut = float(threshold)
+            summarise = lambda s: np.mean(s > cut)
+        else:
+            raise ValueError(
+                f"unknown metric {metric_name!r}; expected one of "
+                "'mean', 'spread', 'percentile', 'exceedance'"
+            )
 
         def simulate(params: dict[str, float]) -> float:
             merged = {**fixed, **params}
-            return float(qc.sample(fixed_u, **merged).astype(np.float64).mean())
+            return float(summarise(qc.sample(fixed_u, **merged).astype(np.float64)))
 
         res = parameter_sensitivity(
             simulate,
@@ -408,7 +443,28 @@ class _Handler(BaseHTTPRequestHandler):
                 return None
             return [float(v) for v in res.total_effect_interval[res.names.index(name)]]
 
+        # An input scoring exactly zero is usually structural rather than
+        # uninteresting -- a scale parameter cannot move a mean. Say so, or the
+        # reader concludes the input does not matter at all.
+        # A structural zero does not land on exactly 0.0 -- the fixed uniform
+        # stream leaves a residue (measured 2.1e-6 for a scale parameter against
+        # a mean). Anything under a tenth of a percent of variance is noise
+        # around zero, not a small real effect.
+        warnings = list(res.warnings)
+        zeroed = [n_ for n_, _f, t in res.ranked() if t < 1e-3]
+        if zeroed and metric_name in {"mean", "spread"}:
+            other = "spread" if metric_name == "mean" else "mean"
+            warnings.append(
+                f"{', '.join(zeroed)} scores zero against the {metric_name} of the "
+                f"distribution. That is often exact rather than incidental -- a "
+                f"scale parameter has no effect on a mean, and a location "
+                f"parameter none on a spread. Re-run against the {other}, a "
+                "percentile, or an exceedance probability to see whether it "
+                "matters for the quantity you actually care about."
+            )
+
         return {
+            "metric": metric_name,
             "rows": [
                 {
                     "name": n_,
@@ -422,7 +478,7 @@ class _Handler(BaseHTTPRequestHandler):
             "interaction_strength": res.interaction_strength,
             "unexplained_variance": res.unexplained_variance,
             "resolved": res.separates_top_two(),
-            "warnings": list(res.warnings),
+            "warnings": warnings,
             "n_model_evaluations": res.n_model_evaluations,
         }
 

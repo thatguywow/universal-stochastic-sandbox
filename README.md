@@ -62,7 +62,7 @@ The `uss` command installs into the venv. Activate it, or call
 `.` alone installs the tool; `.[dev]` adds pytest and ruff. If `pytest` reports
 *no module named pytest*, you installed without the extra.
 
-Verified from a clean clone: 315 tests, lint, CLI, examples and the web
+Verified from a clean clone: 319 tests, lint, CLI, examples and the web
 interface all pass on a fresh install.
 
 ## Use
@@ -171,7 +171,7 @@ Every one of these was a bug first, found by testing against something external.
 | Odds-ratio shifts, not `p × multiplier` | at p=0.9, multipliers 1.2 and 5.0 both clip to exactly 1.0 |
 | Unknown parameter names are refused | `**kwargs` swallowed them: `gaussian` with `men=20` returned **-0.003**, and an extra posterior was sampled, reported, then discarded |
 
-**315 tests.** Samplers are checked against analytic truth (Poisson
+**319 tests.** Samplers are checked against analytic truth (Poisson
 mean/variance, Gumbel's `loc + scale·γ`, Ishigami's Sobol indices); intervals
 against measured coverage over repeated trials; diagnostics against deliberately
 broken inputs.

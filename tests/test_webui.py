@@ -264,6 +264,77 @@ def test_sensitivity_endpoint_ranks_inputs(server) -> None:
     assert r["rows"][0]["total_effect"] > 0.5
 
 
+def test_sensitivity_metric_changes_which_input_dominates(server) -> None:
+    """A scale parameter has zero effect on a mean and total effect on a spread.
+
+    The endpoint used to hardcode the mean, so `std_dev` reported 0% for every
+    distribution forever -- arithmetically right, and useless.
+    """
+    posteriors = {
+        "mean": {"kind": "measurements", "observations": [10, 12, 9, 11, 13]},
+        "std_dev": {"kind": "measurements", "observations": [2.0, 2.2, 1.9, 2.1]},
+    }
+    base = {"query_class": "gaussian", "posteriors": posteriors, "n_base": 400}
+
+    by_mean = post(server, "/api/sensitivity", {**base, "metric": "mean"})
+    by_spread = post(server, "/api/sensitivity", {**base, "metric": "spread"})
+
+    assert by_mean["metric"] == "mean"
+    assert by_mean["rows"][0]["name"] == "mean"
+    assert by_spread["rows"][0]["name"] == "std_dev"
+    assert by_spread["rows"][0]["total_effect"] > 0.9
+
+
+def test_zero_scoring_input_is_explained_not_left_bare(server) -> None:
+    r = post(server, "/api/sensitivity", {
+        "query_class": "gaussian",
+        "posteriors": {
+            "mean": {"kind": "measurements", "observations": [10, 12, 9, 11, 13]},
+            "std_dev": {"kind": "measurements", "observations": [2.0, 2.2, 1.9, 2.1]},
+        },
+        "n_base": 400, "metric": "mean",
+    })
+    assert any("often exact rather than incidental" in w for w in r["warnings"])
+
+
+def test_exceedance_and_percentile_metrics(server) -> None:
+    posteriors = {
+        "mean": {"kind": "measurements", "observations": [10, 12, 9, 11, 13]},
+        "std_dev": {"kind": "measurements", "observations": [2.0, 2.2, 1.9, 2.1]},
+    }
+    base = {"query_class": "gaussian", "posteriors": posteriors, "n_base": 400}
+
+    exc = post(server, "/api/sensitivity",
+               {**base, "metric": "exceedance", "threshold": 14.0})
+    assert exc["metric"] == "exceedance"
+    assert sum(row["total_effect"] for row in exc["rows"]) > 0.5
+
+    pct = post(server, "/api/sensitivity",
+               {**base, "metric": "percentile", "percentile": 0.95})
+    assert pct["metric"] == "percentile"
+
+
+def test_bad_metric_arguments_are_rejected(server) -> None:
+    posteriors = {
+        "mean": {"kind": "measurements", "observations": [10, 12, 9]},
+        "std_dev": {"kind": "measurements", "observations": [2.0, 2.2, 1.9]},
+    }
+    base = {"query_class": "gaussian", "posteriors": posteriors, "n_base": 200}
+
+    status, body = post_expect_error(server, "/api/sensitivity",
+                                     {**base, "metric": "nonsense"})
+    assert status == 400 and "unknown metric" in body["error"]
+
+    status, body = post_expect_error(server, "/api/sensitivity",
+                                     {**base, "metric": "exceedance"})
+    assert status == 400 and "needs a 'threshold'" in body["error"]
+
+    status, body = post_expect_error(
+        server, "/api/sensitivity", {**base, "metric": "percentile", "percentile": 1.5}
+    )
+    assert status == 400 and "percentile must lie" in body["error"]
+
+
 def test_sensitivity_model_is_deterministic_so_no_warning(server) -> None:
     """The endpoint fixes the uniform stream; Sobol requires that."""
     r = post(server, "/api/sensitivity", {
